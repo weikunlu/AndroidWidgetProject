@@ -1,19 +1,20 @@
 package tw.weikun.androidwidgetproject.widget.view;
 
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.TimeZone;
 
 import android.content.Context;
 import android.content.res.Configuration;
+import android.database.ContentObserver;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Handler;
+import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 
 public class DigitalClock extends View {
@@ -21,12 +22,10 @@ public class DigitalClock extends View {
 	public static final String TAG = DigitalClock.class.getSimpleName();
 	
 	private static final String FORMAT_TIME = "hh:mm";
-	private static final String FORMAT_TIME24H = "HH:mm";
+	private static final String FORMAT_TIME24H = "kk:mm";
 	private static final String FORMAT_APM = "aa";
 	private static final int GAP_SPACE = 20;
-	
-	private static SimpleDateFormat sdformat = new SimpleDateFormat(FORMAT_TIME24H);
-	
+		
 	Paint mTextPaint, mTextPaint2;
     int mAscent;
 	String mTimeString = "00:00";
@@ -37,10 +36,24 @@ public class DigitalClock extends View {
 	Runnable mTicker;
 	Handler mHandler;
 	
+	private FormatChangeObserver mFormatChangeObserver;
+	private boolean mAttached = false;
+	
     static final float SHADOW_LARGE_RADIUS = 3.0f;
     static final float SHADOW_Y_OFFSET = 2.0f;
     static final int SHADOW_LARGE_COLOUR = 0xDD000000;
 	
+    private class FormatChangeObserver extends ContentObserver{
+    	public FormatChangeObserver() {
+    		super(new Handler());
+		}
+    	
+    	@Override
+    	public void onChange(boolean selfChange) {
+    		refreshView();
+    	}
+    }
+    
 	public DigitalClock(Context context) {
 		super(context);
 		initClock();
@@ -82,9 +95,7 @@ public class DigitalClock extends View {
 		mTextPaint2.setShadowLayer(SHADOW_LARGE_RADIUS, 0.0f, SHADOW_Y_OFFSET, SHADOW_LARGE_COLOUR);
 		mTextPaint2.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
 		
-		if (mCalendar == null) {
-			mCalendar = Calendar.getInstance();
-		}
+		mCalendar = Calendar.getInstance();
 	}
 
 	/* (non-Javadoc)
@@ -150,12 +161,22 @@ public class DigitalClock extends View {
 		invalidate();
 	}
 	
+	@Override
+	protected void onFinishInflate() {
+		super.onFinishInflate();
+		
+		mCalendar = Calendar.getInstance();
+	}
+	
 	/* (non-Javadoc)
 	 * @see android.view.View#onAttachedToWindow()
 	 */
 	@Override
 	protected void onAttachedToWindow() {
 		super.onAttachedToWindow();
+		
+		if(mAttached) return;
+		mAttached = true;
 		
 		mHandler = new Handler();
 		
@@ -165,11 +186,11 @@ public class DigitalClock extends View {
 				boolean is24HourFormat = DateFormat.is24HourFormat(getContext());
 				
 				long current = System.currentTimeMillis();
-				mCalendar.setTimeZone(TimeZone.getDefault());
+				mCalendar = Calendar.getInstance();
 				mCalendar.setTimeInMillis(current);
 				
 				if(is24HourFormat){
-					setText(sdformat.format(mCalendar.getTime()), "");
+					setText(DateFormat.format(FORMAT_TIME24H, mCalendar), "");
 				}else{
 					setText(DateFormat.format(FORMAT_TIME, mCalendar), DateFormat.format(FORMAT_APM, mCalendar));
 				}
@@ -181,6 +202,15 @@ public class DigitalClock extends View {
 		};
 		mHandler.postAtTime(mTicker, 10);
 		
+		mFormatChangeObserver = new FormatChangeObserver();
+		getContext().getContentResolver().registerContentObserver(Settings.System.CONTENT_URI, true, mFormatChangeObserver);
+		
+	}
+	
+	@Override
+	protected void onDetachedFromWindow() {
+		super.onDetachedFromWindow();
+		getContext().getContentResolver().unregisterContentObserver(mFormatChangeObserver);
 	}
 	
 	public void refreshView(){
@@ -188,11 +218,11 @@ public class DigitalClock extends View {
 		boolean is24HourFormat = DateFormat.is24HourFormat(getContext());
 		
 		long current = System.currentTimeMillis();
-		mCalendar.setTimeZone(TimeZone.getDefault());
+		mCalendar = Calendar.getInstance();
 		mCalendar.setTimeInMillis(current);
 		
 		if(is24HourFormat){
-			setText(sdformat.format(mCalendar.getTime()), "");
+			setText(DateFormat.format(FORMAT_TIME24H, mCalendar), "");
 		}else{
 			setText(DateFormat.format(FORMAT_TIME, mCalendar), DateFormat.format(FORMAT_APM, mCalendar));
 		}
